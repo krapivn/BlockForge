@@ -1,0 +1,85 @@
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+
+class BlockForge:
+    def __init__(self, api_key: str):
+        self.api_url = 'https://api.etherscan.io/api'
+        self.api_key = api_key
+
+    def get_block_data(self, block_number: int) -> dict:
+        params = {
+            'module': 'proxy',
+            'action': 'eth_getBlockByNumber',
+            'tag': hex(block_number),
+            'boolean': 'true',
+            'apikey': self.api_key
+        }
+        response = requests.get(self.api_url, params=params)
+        data = response.json()
+        return data['result'] if 'result' in data else {}
+
+    def get_recent_blocks(self, count: int = 10) -> pd.DataFrame:
+        latest_block = self.get_latest_block_number()
+        blocks = []
+        for i in range(latest_block, latest_block - count, -1):
+            block_data = self.get_block_data(i)
+            if block_data:
+                blocks.append({
+                    'block_number': i,
+                    'timestamp': int(block_data['timestamp'], 16),
+                    'tx_count': len(block_data['transactions']),
+                    'gas_used': int(block_data['gasUsed'], 16),
+                    'gas_limit': int(block_data['gasLimit'], 16)
+                })
+        df = pd.DataFrame(blocks)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+        return df
+
+    def get_latest_block_number(self) -> int:
+        params = {
+            'module': 'proxy',
+            'action': 'eth_blockNumber',
+            'apikey': self.api_key
+        }
+        response = requests.get(self.api_url, params=params)
+        data = response.json()
+        return int(data['result'], 16)
+
+    def plot_block_data(self, count: int = 10):
+        df = self.get_recent_blocks(count)
+        if df.empty:
+            print("No block data found.")
+            return
+
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+
+        color = 'tab:blue'
+        ax1.set_xlabel('Block Number')
+        ax1.set_ylabel('Transaction Count', color=color)
+        ax1.plot(df['block_number'], df['tx_count'], color=color, marker='o', linestyle='-')
+        ax1.tick_params(axis='y', labelcolor=color)
+
+        ax2 = ax1.twinx()
+        color = 'tab:green'
+        ax2.set_ylabel('Gas Used', color=color)
+        ax2.plot(df['block_number'], df['gas_used'], color=color, marker='x', linestyle='--')
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        plt.title('Recent Ethereum Blocks: Transaction Count and Gas Used')
+        fig.tight_layout()
+        plt.show()
+
+# Example Usage
+if __name__ == "__main__":
+    ETHERSCAN_API_KEY = 'YOUR_ETHERSCAN_API_KEY'
+
+    block_forge = BlockForge(api_key=ETHERSCAN_API_KEY)
+
+    # Fetch and Display Recent Block Data
+    recent_blocks_df = block_forge.get_recent_blocks(count=10)
+    print("Recent Blocks Data:")
+    print(recent_blocks_df)
+
+    # Plot Block Data
+    block_forge.plot_block_data(count=10)
